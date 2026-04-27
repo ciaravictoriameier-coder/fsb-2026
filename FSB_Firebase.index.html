@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FSB 2026">
+<title>Foodsave Bankett Basel 2026</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@400;700;900&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+<!-- Firebase -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getDatabase, ref, onValue, set, push, remove, update }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+  // ── FIREBASE CONFIG ─────────────────────────────────────────
+  // WICHTIG: Ersetze diese Werte mit deinen eigenen Firebase-Daten!
+  // Anleitung: console.firebase.google.com → Neues Projekt → Realtime Database
+  const firebaseConfig = {
+    apiKey:            "AIzaSyA4xt7gRWF_3Nf_eEfWkH7zXkFw0UDsTcM",
+    authDomain:        "fsb-2026.firebaseapp.com",
+    databaseURL:       "https://fsb-2026-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId:         "fsb-2026",
+    storageBucket:     "fsb-2026.firebasestorage.app",
+    messagingSenderId: "994486085196",
+    appId:             "1:994486085196:web:a0a1c8b7211c1539e8b6e9"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db  = getDatabase(app);
+
+  // ── DEMO MODE (funktioniert ohne Firebase Config) ────────────
+  // Wenn keine Firebase Config vorhanden, läuft die App im lokalen Modus
+  const isDemo = firebaseConfig.apiKey === "DEINE_API_KEY";
+
+  // ── GLOBALE DATEN ────────────────────────────────────────────
+  window.FSB = {
+    tasks: {},
+    events: {},
+    db, ref, onValue, set, push, remove, update, isDemo,
+    loaded: false
+  };
+
+  if (!isDemo) {
+    // Live-Sync Tasks
+    onValue(ref(db, "tasks"), snap => {
+      window.FSB.tasks = snap.val() || {};
+      if (window.FSB.loaded) renderTasks();
+      updateHeader();
+    });
+    // Live-Sync Events
+    onValue(ref(db, "events"), snap => {
+      window.FSB.events = snap.val() || {};
+      if (window.FSB.loaded) renderCalendar();
+    });
+  }
+
+  window.addEventListener("DOMContentLoaded", () => {
+    window.FSB.loaded = true;
+    if (isDemo) {
+      loadDemoData();
+      showDemoBanner();
+    }
+    renderTasks();
+    renderCalendar();
+    renderRoles();
+  });
+
+  // ── FIREBASE ACTIONS ─────────────────────────────────────────
+  window.fbSetStatus = function(taskId, status) {
+    if (isDemo) {
+      window.FSB.tasks[taskId].status = status;
+      renderTasks(); updateHeader(); return;
+    }
+    update(ref(db, `tasks/${taskId}`), { status });
+  };
+
+  window.fbAddTask = function(taskData) {
+    if (isDemo) {
+      const id = "t" + Date.now();
+      window.FSB.tasks[id] = { ...taskData, comments: {} };
+      renderTasks(); updateHeader(); return;
+    }
+    push(ref(db, "tasks"), { ...taskData, comments: {} });
+  };
+
+  window.fbDeleteTask = function(taskId) {
+    if (isDemo) {
+      delete window.FSB.tasks[taskId];
+      renderTasks(); updateHeader(); return;
+    }
+    remove(ref(db, `tasks/${taskId}`));
+  };
+
+  window.fbAddComment = function(taskId, comment) {
+    if (isDemo) {
+      if (!window.FSB.tasks[taskId].comments) window.FSB.tasks[taskId].comments = {};
+      const id = "c" + Date.now();
+      window.FSB.tasks[taskId].comments[id] = comment;
+      renderTasks(); return;
+    }
+    push(ref(db, `tasks/${taskId}/comments`), comment);
+  };
+
+  window.fbDeleteComment = function(taskId, commentId) {
+    if (isDemo) {
+      delete window.FSB.tasks[taskId].comments[commentId];
+      renderTasks(); return;
+    }
+    remove(ref(db, `tasks/${taskId}/comments/${commentId}`));
+  };
+
+  window.fbAddEvent = function(eventData) {
+    if (isDemo) {
+      const id = "e" + Date.now();
+      window.FSB.events[id] = eventData;
+      renderCalendar(); return;
+    }
+    push(ref(db, "events"), eventData);
+  };
+
+  window.fbDeleteEvent = function(eventId) {
+    if (isDemo) {
+      delete window.FSB.events[eventId];
+      renderCalendar(); return;
+    }
+    remove(ref(db, `events/${eventId}`));
+  };
+
+  function loadDemoData() {
+    window.FSB.tasks = {
+      t1: { title:"Küchenteam für Bankett rekrutieren", bereich:"Kommunikation", person:"PL Logistik", status:"Laufend", prio:"Hoch", date:"15.04.2026", comments: { c1: { author:"PL Logistik", text:"3 Köchinnen bereits bestätigt", time:"10.01.2026 09:00" } } },
+      t2: { title:"Budget 2026 erstellen", bereich:"Finanzen", person:"PL Finanzen", status:"Erledigt", prio:"Hoch", date:"01.03.2026", comments: {} },
+      t3: { title:"Förderantrag Basel Stadt", bereich:"Finanzen", person:"PL Finanzen", status:"Laufend", prio:"Hoch", date:"30.04.2026", comments: {} },
+      t4: { title:"Freiwilligenliste finalisieren", bereich:"Freiwillige", person:"OK Freiwillige", status:"Offen", prio:"Hoch", date:"10.04.2026", comments: {} },
+      t5: { title:"Getränkeliste & Bestellung Bar", bereich:"Bar", person:"OK Bar", status:"Offen", prio:"Hoch", date:"01.05.2026", comments: {} },
+      t6: { title:"Apéro-Konzept ausarbeiten", bereich:"Apéro", person:"OK Apéro", status:"Offen", prio:"Hoch", date:"25.04.2026", comments: {} },
+      t7: { title:"Foto & Video am Veranstaltungstag", bereich:"Foto & Video", person:"Foto/Video", status:"Offen", prio:"Hoch", date:"16.05.2026", comments: {} },
+    };
+    window.FSB.events = {
+      e1: { date:"2026-05-01", time:"18:00", title:"OK-Meeting Generalprobe", location:"Basel", attendees:"PL Logistik, PL Finanzen, OK Bar, OK Apéro", note:"Ablauf durchgehen" },
+      e2: { date:"2026-05-16", time:"17:00", title:"Foodsave Bankett 2026", location:"Basel", attendees:"Alle", note:"DER grosse Tag!" },
+    };
+  }
+
+  function showDemoBanner() {
+    document.getElementById("demo-banner").style.display = "flex";
+  }
+</script>
+
+<style>
+:root {
+  --green:#1f5c1f; --green-mid:#4a7c2f; --green-light:#7ab648; --green-pale:#d4f0c0;
+  --cream:#f5f0e8; --warm:#ede6d2; --card:#fffdf7; --text:#1a1a0e; --text-soft:#5a5a48;
+  --border:#ddd5b8; --orange:#d4621a; --blue:#1a5580; --red:#b83030;
+  --radius:14px; --shadow:0 2px 12px rgba(0,0,0,0.08); --shadow-lg:0 8px 32px rgba(0,0,0,0.15);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text);overflow:hidden;}
+.app{display:flex;flex-direction:column;height:100vh;height:100dvh;}
+
+/* DEMO BANNER */
+#demo-banner{display:none;background:#fff3cd;border-bottom:2px solid #f0c040;padding:8px 16px;font-size:0.78rem;color:#7a5a00;align-items:center;gap:8px;flex-shrink:0;}
+#demo-banner strong{font-weight:700;}
+#demo-banner a{color:#1a5580;font-weight:600;text-decoration:underline;}
+
+/* SYNC INDICATOR */
+.sync-dot{width:8px;height:8px;border-radius:50%;background:#7ab648;display:inline-block;margin-right:4px;animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
+
+/* HEADER */
+header{background:var(--green);padding:12px 18px 10px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;border-bottom:3px solid var(--green-light);}
+.header-left h1{font-family:'Fraunces',serif;font-size:1.15rem;color:white;line-height:1.1;}
+.header-left p{font-size:0.65rem;color:rgba(255,255,255,0.6);letter-spacing:0.06em;text-transform:uppercase;margin-top:2px;}
+.header-stats{display:flex;gap:8px;}
+.hstat{text-align:center;background:rgba(255,255,255,0.12);border-radius:10px;padding:4px 10px;min-width:46px;}
+.hstat .n{font-family:'Fraunces',serif;font-size:1.2rem;font-weight:700;color:var(--green-light);line-height:1;}
+.hstat .l{font-size:0.55rem;color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:0.05em;}
+
+/* TABS */
+.tab-bar{display:flex;background:var(--warm);border-bottom:2px solid var(--border);overflow-x:auto;flex-shrink:0;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.tab-bar::-webkit-scrollbar{display:none;}
+.tab-btn{padding:10px 15px;font-family:'DM Sans',sans-serif;font-size:0.78rem;font-weight:500;color:var(--text-soft);border:none;background:none;cursor:pointer;white-space:nowrap;border-bottom:3px solid transparent;transition:all 0.2s;display:flex;align-items:center;gap:5px;}
+.tab-btn .dot{width:7px;height:7px;border-radius:50%;}
+.tab-btn.active{color:var(--green);border-bottom-color:var(--green);font-weight:600;}
+
+/* CONTENT */
+.content{flex:1;overflow:hidden;position:relative;}
+.view{display:none;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+.view.active{display:block;}
+
+/* TOOLBAR */
+.toolbar{padding:10px 14px;display:flex;gap:7px;flex-wrap:wrap;align-items:center;background:var(--card);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10;}
+.search-input{flex:1;min-width:110px;padding:8px 12px;border:1.5px solid var(--border);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:0.83rem;background:var(--cream);color:var(--text);-webkit-appearance:none;}
+.search-input:focus{outline:none;border-color:var(--green-light);}
+.filter-select{padding:8px 26px 8px 9px;border:1.5px solid var(--border);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:0.78rem;background:var(--cream);color:var(--text);-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%235a5a48' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 7px center;}
+.add-btn{padding:8px 13px;background:var(--green);color:white;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:0.8rem;font-weight:600;cursor:pointer;white-space:nowrap;-webkit-appearance:none;}
+.add-btn:active{background:var(--green-mid);}
+
+/* TASK CARDS */
+.task-list{padding:10px 14px 100px;}
+.task-card{background:var(--card);border-radius:var(--radius);margin-bottom:10px;box-shadow:var(--shadow);overflow:hidden;border-left:5px solid var(--border);}
+.task-card[data-status="Offen"]{border-left-color:#c8b840;}
+.task-card[data-status="Laufend"]{border-left-color:var(--blue);}
+.task-card[data-status="Erledigt"]{border-left-color:var(--green-light);}
+.task-card[data-status="Blockiert"]{border-left-color:var(--red);}
+.task-body{padding:11px 13px 7px;}
+.task-title{font-family:'Fraunces',serif;font-size:0.97rem;font-weight:700;line-height:1.3;margin-bottom:7px;color:var(--text);}
+.task-card[data-status="Erledigt"] .task-title{text-decoration:line-through;color:#aaa;}
+.task-meta{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;}
+.badge{font-size:0.67rem;font-weight:600;padding:2px 8px;border-radius:20px;}
+.badge-bereich{background:#f0ece0;color:var(--text-soft);}
+.badge-prio-hoch{background:#fde8e0;color:#8a2020;}
+.badge-prio-mittel{background:#fff0c0;color:#5a4000;}
+.badge-prio-tief{background:#d4f0c0;color:#2d5016;}
+.task-date{font-size:0.72rem;color:var(--text-soft);margin-bottom:5px;}
+
+/* COMMENTS */
+.comments-section{margin:4px 0;}
+.comment-item{background:#f5f0e8;border-radius:8px;padding:7px 10px;margin-bottom:4px;border-left:3px solid var(--border);position:relative;}
+.comment-author{font-size:0.67rem;font-weight:700;color:var(--green);margin-bottom:1px;}
+.comment-text{font-size:0.77rem;color:var(--text-soft);font-style:italic;}
+.comment-time{font-size:0.61rem;color:#aaa;margin-top:2px;}
+.comment-del{position:absolute;top:6px;right:8px;background:none;border:none;cursor:pointer;color:#ccc;font-size:0.82rem;-webkit-appearance:none;}
+.comment-del:active{color:var(--red);}
+
+/* STATUS BUTTONS */
+.status-buttons{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;padding:7px 13px 10px;background:rgba(0,0,0,0.02);border-top:1px solid var(--border);}
+.status-btn{padding:10px 3px;border:2px solid transparent;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:0.68rem;font-weight:700;cursor:pointer;text-align:center;transition:all 0.15s;line-height:1.3;-webkit-appearance:none;}
+.status-btn:active{transform:scale(0.95);}
+.status-btn.offen{background:#eee8d0;color:#6b5f30;}
+.status-btn.laufend{background:#d4eaff;color:#1a5580;}
+.status-btn.erledigt{background:#d4edbe;color:#2d5016;}
+.status-btn.blockiert{background:#fde8e0;color:#8a2020;}
+.status-btn.active.offen{border-color:#6b5f30;box-shadow:0 0 0 2px rgba(107,95,48,0.25);}
+.status-btn.active.laufend{border-color:#1a5580;box-shadow:0 0 0 2px rgba(26,85,128,0.25);}
+.status-btn.active.erledigt{border-color:#2d5016;box-shadow:0 0 0 2px rgba(45,80,22,0.25);}
+.status-btn.active.blockiert{border-color:#8a2020;box-shadow:0 0 0 2px rgba(138,32,32,0.25);}
+.task-actions{display:flex;gap:7px;padding:4px 13px 9px;}
+.action-btn{flex:1;padding:8px;border:1.5px solid var(--border);border-radius:9px;background:none;font-family:'DM Sans',sans-serif;font-size:0.72rem;color:var(--text-soft);cursor:pointer;-webkit-appearance:none;}
+.action-btn:active{background:var(--warm);}
+.action-btn.has-comment{border-color:var(--orange);color:var(--orange);}
+.action-btn.delete-btn{flex:0;padding:8px 13px;color:#ccc;}
+.action-btn.delete-btn:active{color:var(--red);border-color:var(--red);}
+
+/* CALENDAR */
+.cal-wrap{padding:13px;}
+.cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px;}
+.cal-nav-btn{width:36px;height:36px;background:var(--green);color:white;border:none;border-radius:9px;font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;-webkit-appearance:none;}
+.cal-nav-btn:active{background:var(--green-mid);}
+.cal-month{font-family:'Fraunces',serif;font-size:1.15rem;color:var(--green);}
+.cal-add-btn{padding:7px 12px;background:var(--green);color:white;border:none;border-radius:9px;font-family:'DM Sans',sans-serif;font-size:0.76rem;font-weight:600;cursor:pointer;-webkit-appearance:none;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:13px;}
+.cal-day-name{text-align:center;font-size:0.6rem;font-weight:700;color:var(--text-soft);padding:3px 0;text-transform:uppercase;}
+.cal-cell{min-height:58px;background:var(--card);border-radius:7px;padding:3px;border:1.5px solid transparent;cursor:pointer;}
+.cal-cell:active{border-color:var(--green-light);}
+.cal-cell.other-month{background:rgba(0,0,0,0.03);opacity:0.5;}
+.cal-cell.today{border-color:var(--green);background:#f0fae8;}
+.cal-num{font-size:0.68rem;font-weight:700;color:var(--text-soft);margin-bottom:2px;}
+.cal-cell.today .cal-num{color:var(--green);}
+.cal-ev{font-size:0.57rem;border-radius:3px;padding:1px 3px;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;}
+.cal-more{font-size:0.54rem;color:var(--text-soft);}
+.event-list-title{font-family:'Fraunces',serif;font-size:1.05rem;color:var(--green);margin-bottom:9px;}
+.event-item{background:var(--card);border-radius:var(--radius);padding:11px 13px;margin-bottom:8px;box-shadow:var(--shadow);display:flex;gap:10px;align-items:flex-start;}
+.event-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;margin-top:4px;background:var(--green);}
+.event-info strong{font-size:0.86rem;display:block;margin-bottom:2px;}
+.event-meta{font-size:0.72rem;color:var(--text-soft);margin-bottom:4px;}
+.event-attendees{font-size:0.7rem;color:var(--green);font-weight:600;}
+.event-del{margin-left:auto;background:none;border:none;cursor:pointer;color:#ccc;font-size:1rem;flex-shrink:0;-webkit-appearance:none;}
+.event-del:active{color:var(--red);}
+
+/* ATTENDEE SELECTOR */
+.attendee-selector{display:flex;flex-direction:column;gap:5px;}
+.attendee-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border:2px solid var(--border);border-radius:11px;cursor:pointer;transition:all 0.15s;-webkit-user-select:none;user-select:none;}
+.attendee-row.selected{border-color:var(--green);background:#f0fae8;}
+.attendee-row:active{opacity:0.8;}
+.attendee-check-box{width:22px;height:22px;border-radius:6px;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:0.9rem;transition:all 0.15s;}
+.attendee-row.selected .attendee-check-box{background:var(--green);border-color:var(--green);color:white;}
+.attendee-dot-sm{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.attendee-label{font-size:0.83rem;font-weight:500;}
+
+/* ROLES */
+.roles-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:11px;padding:13px;}
+.role-card{background:var(--card);border-radius:var(--radius);padding:12px 14px;border-left:5px solid;box-shadow:var(--shadow);}
+.role-card h3{font-family:'Fraunces',serif;font-size:0.97rem;margin-bottom:2px;}
+.role-sub{font-size:0.65rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-soft);margin-bottom:7px;}
+.role-items{list-style:none;}
+.role-item{display:flex;align-items:flex-start;gap:6px;padding:4px 0;border-bottom:1px solid var(--warm);font-size:0.8rem;color:var(--text-soft);}
+.role-item:last-child{border-bottom:none;}
+.role-item-text{flex:1;}
+.role-item-edit{background:none;border:none;cursor:pointer;color:#ccc;font-size:0.78rem;flex-shrink:0;-webkit-appearance:none;padding:1px 3px;}
+.role-item-edit:active{color:var(--green);}
+.role-add-btn{margin-top:7px;width:100%;padding:6px;border:1.5px dashed var(--border);border-radius:9px;background:none;font-family:'DM Sans',sans-serif;font-size:0.76rem;color:var(--text-soft);cursor:pointer;-webkit-appearance:none;}
+.role-add-btn:active{background:var(--warm);}
+
+/* OVERVIEW */
+.overview-pad{padding:13px;}
+.section-title{font-family:'Fraunces',serif;font-size:1.05rem;color:var(--green);margin-bottom:9px;margin-top:16px;padding-bottom:3px;border-bottom:2px solid var(--green-pale);}
+.section-title:first-child{margin-top:0;}
+.ov-stats{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-bottom:5px;}
+.ov-card{background:var(--card);border-radius:var(--radius);padding:12px;box-shadow:var(--shadow);text-align:center;}
+.ov-card .ov-num{font-family:'Fraunces',serif;font-size:2rem;font-weight:900;line-height:1;}
+.ov-card .ov-lbl{font-size:0.68rem;color:var(--text-soft);text-transform:uppercase;letter-spacing:0.06em;margin-top:2px;}
+.ov-card.c-green .ov-num{color:var(--green);}
+.ov-card.c-blue .ov-num{color:var(--blue);}
+.ov-card.c-amber .ov-num{color:#b8820a;}
+.ov-card.c-red .ov-num{color:var(--red);}
+.prog-row{display:flex;align-items:center;gap:9px;margin-bottom:8px;}
+.prog-label{font-size:0.74rem;width:145px;flex-shrink:0;}
+.prog-track{flex:1;height:9px;background:var(--warm);border-radius:20px;overflow:hidden;}
+.prog-fill{height:100%;border-radius:20px;transition:width 0.6s ease;}
+.prog-count{font-size:0.68rem;color:var(--text-soft);width:32px;text-align:right;flex-shrink:0;}
+.stats-card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;margin-bottom:11px;}
+.stats-card-header{background:var(--green);color:white;padding:9px 13px;font-family:'Fraunces',serif;font-size:0.92rem;}
+.stats-row{display:flex;align-items:center;gap:9px;padding:8px 13px;border-bottom:1px solid var(--warm);}
+.stats-row:last-child{border-bottom:none;}
+.stats-label{flex:1;font-size:0.83rem;}
+.stats-input{width:68px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.88rem;text-align:center;-webkit-appearance:none;background:white;}
+.stats-input:focus{outline:none;border-color:var(--green-light);}
+.stats-unit{font-size:0.71rem;color:var(--text-soft);width:48px;}
+.stats-total{background:var(--green-pale);padding:9px 13px;display:flex;justify-content:space-between;align-items:center;}
+.stats-total-label{font-size:0.8rem;font-weight:600;color:var(--green);}
+.stats-total-num{font-family:'Fraunces',serif;font-size:1.25rem;font-weight:700;color:var(--green);}
+.visitor-card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:13px;margin-bottom:11px;}
+.visitor-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:9px;}
+.visitor-field label{display:block;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-soft);margin-bottom:4px;}
+.visitor-field input{width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:9px;font-family:'DM Sans',sans-serif;font-size:0.88rem;-webkit-appearance:none;background:white;}
+.visitor-field input:focus{outline:none;border-color:var(--green-light);}
+.visitor-field.full{grid-column:1/-1;}
+.visitor-total{margin-top:11px;background:var(--green-pale);border-radius:10px;padding:10px 13px;display:flex;justify-content:space-between;align-items:center;}
+.visitor-total-label{font-size:0.83rem;font-weight:600;color:var(--green);}
+.visitor-total-num{font-family:'Fraunces',serif;font-size:1.5rem;font-weight:900;color:var(--green);}
+.food-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;padding:9px 13px;}
+.food-item{background:var(--warm);border-radius:10px;padding:8px 10px;display:flex;align-items:center;gap:7px;}
+.food-emoji{font-size:1.2rem;flex-shrink:0;}
+.food-info{flex:1;}
+.food-name{font-size:0.78rem;font-weight:600;color:var(--text);}
+.food-input{width:55px;padding:4px 6px;border:1.5px solid var(--border);border-radius:7px;font-family:'DM Sans',sans-serif;font-size:0.83rem;text-align:center;-webkit-appearance:none;background:white;margin-top:3px;}
+.food-input:focus{outline:none;border-color:var(--green-light);}
+.food-unit{font-size:0.66rem;color:var(--text-soft);}
+.food-add-row{grid-column:1/-1;display:flex;gap:7px;}
+.food-add-input{flex:1;padding:8px 10px;border:1.5px dashed var(--border);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:0.81rem;-webkit-appearance:none;background:white;}
+.food-add-btn{padding:8px 12px;background:var(--green);color:white;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:0.8rem;font-weight:600;cursor:pointer;-webkit-appearance:none;}
+
+/* MODALS */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:flex-end;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal-sheet{background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:600px;max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:17px 17px 38px;animation:slideUp 0.25s ease;}
+@keyframes slideUp{from{transform:translateY(100%);opacity:0;}to{transform:translateY(0);opacity:1;}}
+.modal-handle{width:38px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 13px;}
+.modal-title{font-family:'Fraunces',serif;font-size:1.1rem;margin-bottom:13px;color:var(--green);}
+.form-row{margin-bottom:10px;}
+.form-row label{display:block;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-soft);margin-bottom:4px;}
+.form-row input,.form-row select,.form-row textarea{width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:11px;font-family:'DM Sans',sans-serif;font-size:0.86rem;background:white;color:var(--text);-webkit-appearance:none;}
+.form-row textarea{height:78px;resize:vertical;}
+.form-row input:focus,.form-row select:focus,.form-row textarea:focus{outline:none;border-color:var(--green-light);}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;}
+.modal-footer{display:flex;gap:9px;margin-top:13px;}
+.modal-footer button{flex:1;padding:13px;border:none;border-radius:12px;font-family:'DM Sans',sans-serif;font-size:0.86rem;font-weight:700;cursor:pointer;-webkit-appearance:none;}
+.modal-footer button:active{opacity:0.8;}
+.btn-confirm{background:var(--green);color:white;}
+.btn-cancel{background:var(--warm);color:var(--text-soft);}
+.person-select{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:5px;}
+.person-chip-btn{padding:5px 10px;border:1.5px solid var(--border);border-radius:20px;font-family:'DM Sans',sans-serif;font-size:0.76rem;font-weight:600;cursor:pointer;-webkit-appearance:none;transition:all 0.15s;}
+.person-chip-btn.selected{border-color:var(--green);background:var(--green);color:white;}
+
+.empty-state{text-align:center;padding:38px 20px;color:var(--text-soft);}
+.empty-state .emoji{font-size:2.3rem;margin-bottom:9px;}
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:10px;}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- DEMO BANNER -->
+<div id="demo-banner">
+  <span class="sync-dot"></span>
+  <span><strong>Demo-Modus:</strong> Änderungen werden nur lokal gespeichert. Für echte Team-Sync: Firebase einrichten → <a href="#" onclick="alert('Anleitung: console.firebase.google.com → Projekt erstellen → Realtime Database → Config in index.html einfügen')">Anleitung</a></span>
+</div>
+
+<!-- HEADER -->
+<header>
+  <div class="header-left">
+    <h1>&#127807; Foodsave Bankett Basel</h1>
+    <p><span class="sync-dot"></span>Live-Sync aktiv · 2026</p>
+  </div>
+  <div class="header-stats">
+    <div class="hstat"><div class="n" id="hs-total">0</div><div class="l">Total</div></div>
+    <div class="hstat"><div class="n" id="hs-done">0</div><div class="l">Fertig</div></div>
+  </div>
+</header>
+
+<!-- TABS -->
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="showTab('tasks',this)"><span class="dot" style="background:#7ab648"></span>Aufgaben</button>
+  <button class="tab-btn" onclick="showTab('calendar',this)"><span class="dot" style="background:#1a5580"></span>Kalender</button>
+  <button class="tab-btn" onclick="showTab('roles',this)"><span class="dot" style="background:#d4621a"></span>Rollen</button>
+  <button class="tab-btn" onclick="showTab('overview',this)"><span class="dot" style="background:#6a3aaa"></span>Übersicht</button>
+</div>
+
+<div class="content">
+
+  <!-- TASKS -->
+  <div class="view active" id="view-tasks">
+    <div class="toolbar">
+      <input class="search-input" id="search" type="search" placeholder="Suchen..." oninput="renderTasks()">
+      <select class="filter-select" id="f-person" onchange="renderTasks()">
+        <option value="">Alle</option>
+        <optgroup label="Projektleitung"><option>PL Logistik</option><option>PL Finanzen</option></optgroup>
+        <optgroup label="Vorstand"><option>Kassier</option><option>Vorstand 2</option></optgroup>
+        <optgroup label="OK-Team"><option>OK Kommunikation</option><option>OK Freiwillige</option><option>OK Deko &amp; Infostand</option><option>OK Bar</option><option>OK Apéro</option><option>Foto/Video</option></optgroup>
+      </select>
+      <select class="filter-select" id="f-status" onchange="renderTasks()">
+        <option value="">Alle Status</option>
+        <option>Offen</option><option>Laufend</option><option>Erledigt</option><option>Blockiert</option>
+      </select>
+      <button class="add-btn" onclick="openTaskModal()">+ Aufgabe</button>
+    </div>
+    <div class="task-list" id="task-list"></div>
+  </div>
+
+  <!-- CALENDAR -->
+  <div class="view" id="view-calendar">
+    <div class="cal-wrap">
+      <div class="cal-nav">
+        <button class="cal-nav-btn" onclick="changeMonth(-1)">&#8249;</button>
+        <span class="cal-month" id="cal-label"></span>
+        <div style="display:flex;gap:7px">
+          <button class="cal-nav-btn" onclick="changeMonth(1)">&#8250;</button>
+          <button class="cal-add-btn" onclick="openEventModal()">+ Event</button>
+        </div>
+      </div>
+      <div class="cal-grid" id="cal-grid"></div>
+      <div class="event-list-title">Events dieses Monats</div>
+      <div id="event-list"></div>
+    </div>
+  </div>
+
+  <!-- ROLES -->
+  <div class="view" id="view-roles">
+    <div class="roles-grid" id="roles-grid"></div>
+  </div>
+
+  <!-- OVERVIEW -->
+  <div class="view" id="view-overview">
+    <div class="overview-pad">
+      <div class="section-title">Aufgaben-Status</div>
+      <div class="ov-stats">
+        <div class="ov-card c-amber"><div class="ov-num" id="ov-offen">0</div><div class="ov-lbl">Offen</div></div>
+        <div class="ov-card c-blue"><div class="ov-num" id="ov-laufend">0</div><div class="ov-lbl">Laufend</div></div>
+        <div class="ov-card c-green"><div class="ov-num" id="ov-erledigt">0</div><div class="ov-lbl">Erledigt</div></div>
+        <div class="ov-card c-red"><div class="ov-num" id="ov-blockiert">0</div><div class="ov-lbl">Blockiert</div></div>
+      </div>
+      <div class="section-title">Fortschritt pro Person</div>
+      <div id="prog-bars"></div>
+      <div class="section-title">Freiwillige pro Bereich</div>
+      <div class="stats-card">
+        <div class="stats-card-header">Freiwillige – Einsatzorte</div>
+        <div id="freiwillige-rows"></div>
+        <div class="stats-total"><span class="stats-total-label">Total Freiwillige</span><span class="stats-total-num" id="fw-total">0</span></div>
+      </div>
+      <div class="section-title">Besucherinnen &amp; Besucher</div>
+      <div class="visitor-card">
+        <div style="font-size:0.8rem;color:var(--text-soft)">Manuelle Erfassung nach dem Event</div>
+        <div class="visitor-grid">
+          <div class="visitor-field"><label>Erwachsene</label><input type="number" id="vis-adult" placeholder="0" oninput="updateVisitorTotal()"></div>
+          <div class="visitor-field"><label>Kinder</label><input type="number" id="vis-kids" placeholder="0" oninput="updateVisitorTotal()"></div>
+          <div class="visitor-field"><label>Senioren/innen</label><input type="number" id="vis-senior" placeholder="0" oninput="updateVisitorTotal()"></div>
+          <div class="visitor-field"><label>Freiwillige</label><input type="number" id="vis-vol" placeholder="0" oninput="updateVisitorTotal()"></div>
+          <div class="visitor-field full"><label>Notizen</label><input type="text" id="vis-note" placeholder="z.B. Warteliste, Besonderes..."></div>
+        </div>
+        <div class="visitor-total"><span class="visitor-total-label">Total Personen</span><span class="visitor-total-num" id="vis-total">0</span></div>
+      </div>
+      <div class="section-title">Lebensmittel-Statistik</div>
+      <div class="stats-card">
+        <div class="stats-card-header">Lebensmittel – Mengen</div>
+        <div class="food-grid" id="food-grid"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<!-- TASK MODAL -->
+<div class="modal-overlay" id="task-modal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Neue Aufgabe</div>
+    <div class="form-row"><label>Aufgabe</label><input type="text" id="t-title" placeholder="Aufgabenbeschreibung..."></div>
+    <div class="form-grid">
+      <div class="form-row"><label>Bereich</label>
+        <select id="t-bereich"><option>Logistik</option><option>Kommunikation</option><option>Finanzen</option><option>Sponsoring</option><option>Bankverwaltung</option><option>Freiwillige</option><option>Deko &amp; Infostand</option><option>Bar</option><option>Apéro</option><option>Foto &amp; Video</option><option>Vereinswesen</option><option>Sonstiges</option></select>
+      </div>
+      <div class="form-row"><label>Person</label>
+        <select id="t-person"><option>PL Logistik</option><option>PL Finanzen</option><option>Kassier</option><option>Vorstand 2</option><option>OK Kommunikation</option><option>OK Freiwillige</option><option>OK Deko &amp; Infostand</option><option>OK Bar</option><option>OK Apéro</option><option>Foto/Video</option></select>
+      </div>
+      <div class="form-row"><label>Status</label>
+        <select id="t-status"><option>Offen</option><option>Laufend</option><option>Erledigt</option><option>Blockiert</option></select>
+      </div>
+      <div class="form-row"><label>Priorität</label>
+        <select id="t-prio"><option>Hoch</option><option>Mittel</option><option>Tief</option></select>
+      </div>
+    </div>
+    <div class="form-row"><label>Fällig am</label><input type="text" id="t-date" placeholder="z.B. 15.05.2026"></div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal('task-modal')">Abbrechen</button>
+      <button class="btn-confirm" onclick="addTask()">Hinzufügen</button>
+    </div>
+  </div>
+</div>
+
+<!-- COMMENT MODAL -->
+<div class="modal-overlay" id="comment-modal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Kommentar hinzufügen</div>
+    <p id="c-task-name" style="font-size:0.81rem;color:var(--text-soft);margin-bottom:10px;"></p>
+    <div class="form-row"><label>Von wem?</label><div class="person-select" id="c-person-select"></div></div>
+    <div class="form-row"><label>Kommentar</label><textarea id="c-text" placeholder="Notizen, Hinweise, Updates..."></textarea></div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal('comment-modal')">Abbrechen</button>
+      <button class="btn-confirm" onclick="saveComment()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- EVENT MODAL -->
+<div class="modal-overlay" id="event-modal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Event eintragen</div>
+    <div class="form-row"><label>Titel</label><input type="text" id="ev-title" placeholder="z.B. OK-Meeting, Bankett..."></div>
+    <div class="form-grid">
+      <div class="form-row"><label>Datum</label><input type="date" id="ev-date"></div>
+      <div class="form-row"><label>Uhrzeit</label><input type="time" id="ev-time"></div>
+    </div>
+    <div class="form-row"><label>Ort (optional)</label><input type="text" id="ev-location" placeholder="Basel, Zoom..."></div>
+    <div class="form-row"><label>Wer nimmt teil? (antippen)</label><div class="attendee-selector" id="attendee-selector"></div></div>
+    <div class="form-row"><label>Notiz</label><textarea id="ev-note" placeholder="Agenda, Infos..." style="height:60px"></textarea></div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal('event-modal')">Abbrechen</button>
+      <button class="btn-confirm" onclick="addEvent()">Eintragen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ROLE EDIT MODAL -->
+<div class="modal-overlay" id="role-modal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="role-modal-title">Aufgabe bearbeiten</div>
+    <div class="form-row"><label>Beschreibung</label><input type="text" id="role-edit-input" placeholder="Aufgabenbeschreibung..."></div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal('role-modal')">Abbrechen</button>
+      <button class="btn-confirm" onclick="saveRoleEdit()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const PERSONS=[
+  {label:'PL Logistik',bg:'#d4f0c0',fg:'#2d5016'},
+  {label:'PL Finanzen',bg:'#d8e8ff',fg:'#1a3a6a'},
+  {label:'Kassier',bg:'#ffe8c8',fg:'#7a3a00'},
+  {label:'Vorstand 2',bg:'#ffd8f0',fg:'#6a1040'},
+  {label:'OK Kommunikation',bg:'#e0d4ff',fg:'#6a3aaa'},
+  {label:'OK Freiwillige',bg:'#d4f0f0',fg:'#0a4a4a'},
+  {label:'OK Deko & Infostand',bg:'#fff0c0',fg:'#5a4000'},
+  {label:'OK Bar',bg:'#ffe0c0',fg:'#6a2000'},
+  {label:'OK Apéro',bg:'#fce8ff',fg:'#5a0060'},
+  {label:'Foto/Video',bg:'#ffd4d4',fg:'#7a1010'},
+];
+function pByLabel(l){return PERSONS.find(p=>p.label===l)||{bg:'#eee',fg:'#555',label:l};}
+
+let commentTaskId=null, selectedAuthor=null, roleEditTarget=null;
+let calYear=2026, calMonth=3;
+const MONTHS_DE=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+const DAYS_DE=['Mo','Di','Mi','Do','Fr','Sa','So'];
+
+let roles=[
+  {person:'PL Logistik',color:'#4a7c2f',items:['Gesamtlogistik (Transport, Lagerung, Material)','Kommunikation & Koordination mit Köchinnen','Auf- und Abbau am Veranstaltungstag','Ablaufplan und Tageskoordination','OK-Team Unterstützung (Logistik)']},
+  {person:'PL Finanzen',color:'#1a5580',items:['Budgetplanung und -kontrolle','Förderanträge und Stiftungsgesuche','Sponsorenakquise und -pflege (operativ)','Finanzreporting an Vorstand','Abrechnung des Events']},
+  {person:'Kassier (Vorstand 1)',color:'#d4621a',items:['Bankkonto-Führung & Zahlungsverkehr','Kollektivunterschrift (Statuten Art. 6)','Jahresrechnung & Revisionsunterlagen','Zahlungsfreigabe (PL 2 bereitet vor)']},
+  {person:'Vorstand 2',color:'#b83090',items:['Vertretung des Vereins nach aussen','Einberufung & Leitung Mitgliederversammlung','Protokollführung Vorstandssitzungen','Mitgliederregister & Mitgliedercare']},
+  {person:'OK Kommunikation',color:'#6a3aaa',items:['Einladungen gestalten & versenden','Newsletter an Gäste','Anmeldemanagement für Gäste']},
+  {person:'OK Freiwillige',color:'#0a8888',items:['Freiwilligenliste aufstellen & pflegen','Einsatzplan erstellen','Briefing & Koordination am Event']},
+  {person:'OK Deko & Infostand',color:'#aa8800',items:['Dekokonzept entwickeln','Material besorgen & vorbereiten','Infostand aufbauen (Flyer, Rollup)']},
+  {person:'OK Bar',color:'#6a2000',items:['Getränkeliste erstellen & bestellen','Bar aufbauen und einrichten','Getränkeausgabe & Abrechnung']},
+  {person:'OK Apéro',color:'#5a0060',items:['Apéro-Konzept ausarbeiten','Zutaten beschaffen','Vorbereitung & Aufbau Apéro-Bereich']},
+  {person:'Foto/Video',color:'#cc2020',items:['Shooting-Plan & Bildmotive festlegen','Foto & Video am Veranstaltungstag','Fotos für Social Media & Jahresbericht']},
+];
+
+let freiwilligeData=[
+  {label:'Infostand',count:0},{label:'Küche',count:0},{label:'Allrounder/innen',count:0},
+  {label:'Aufbau',count:0},{label:'Abbau',count:0},{label:'Buffet',count:0},
+  {label:'Bar',count:0},{label:'Deko',count:0},
+];
+let foodItems=[
+  {emoji:'🥦',name:'Gemüse',amount:'',unit:'kg'},{emoji:'🍎',name:'Früchte',amount:'',unit:'kg'},
+  {emoji:'🍞',name:'Brot/Gebäck',amount:'',unit:'kg'},{emoji:'🧀',name:'Käse',amount:'',unit:'kg'},
+  {emoji:'🥩',name:'Fleisch',amount:'',unit:'kg'},{emoji:'🐟',name:'Fisch',amount:'',unit:'kg'},
+  {emoji:'🥛',name:'Milchprodukte',amount:'',unit:'kg'},{emoji:'🫙',name:'Konserven',amount:'',unit:'Stk'},
+];
+
+// ── TABS ──────────────────────────────────────────────────────
+function showTab(name,btn){
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('view-'+name).classList.add('active');
+  if(name==='tasks')renderTasks();
+  if(name==='calendar')renderCalendar();
+  if(name==='roles')renderRoles();
+  if(name==='overview')renderOverview();
+}
+
+// ── TASKS ────────────────────────────────────────────────────
+function getTasks(){return window.FSB ? window.FSB.tasks : {};}
+
+function renderTasks(){
+  const tasks=getTasks();
+  const q=(document.getElementById('search').value||'').toLowerCase();
+  const fP=document.getElementById('f-person').value;
+  const fS=document.getElementById('f-status').value;
+  const filtered=Object.entries(tasks).filter(([id,t])=>{
+    if(q&&!t.title.toLowerCase().includes(q)&&!(t.bereich||'').toLowerCase().includes(q))return false;
+    if(fP&&t.person!==fP)return false;
+    if(fS&&t.status!==fS)return false;
+    return true;
+  });
+  const list=document.getElementById('task-list');
+  if(!filtered.length){
+    list.innerHTML='<div class="empty-state"><div class="emoji">🔍</div><p>Keine Aufgaben gefunden</p></div>';
+    updateHeader();return;
+  }
+  list.innerHTML=filtered.map(([id,t])=>{
+    const per=pByLabel(t.person);
+    const pC={Hoch:'badge-prio-hoch',Mittel:'badge-prio-mittel',Tief:'badge-prio-tief'}[t.prio]||'';
+    const pE={Hoch:'🔴',Mittel:'🟠',Tief:'🟢'}[t.prio]||'';
+    const comments=t.comments||{};
+    const comHtml=Object.entries(comments).map(([cid,c])=>`
+      <div class="comment-item">
+        <div class="comment-author">${c.author||'Unbekannt'}</div>
+        <div class="comment-text">${c.text}</div>
+        <div class="comment-time">${c.time||''}</div>
+        <button class="comment-del" onclick="delComment('${id}','${cid}')">✕</button>
+      </div>`).join('');
+    const numCom=Object.keys(comments).length;
+    return`<div class="task-card" data-id="${id}" data-status="${t.status||'Offen'}">
+      <div class="task-body">
+        <div class="task-title">${t.title}</div>
+        <div class="task-meta">
+          <span class="badge" style="background:${per.bg};color:${per.fg}">${t.person}</span>
+          <span class="badge badge-bereich">${t.bereich||''}</span>
+          ${t.prio?`<span class="badge ${pC}">${pE} ${t.prio}</span>`:''}
+        </div>
+        ${t.date?`<div class="task-date">📅 ${t.date}</div>`:''}
+        <div class="comments-section">${comHtml}</div>
+        <div class="task-actions">
+          <button class="action-btn ${numCom?'has-comment':''}" onclick="openComment('${id}')">
+            💬 ${numCom?numCom+' Kommentar(e)':'+ Kommentar'}
+          </button>
+          <button class="action-btn delete-btn" onclick="delTask('${id}')">🗑</button>
+        </div>
+      </div>
+      <div class="status-buttons">
+        <button class="status-btn offen ${t.status==='Offen'?'active':''}" onclick="setStatus('${id}','Offen',this)">📋<br>Offen</button>
+        <button class="status-btn laufend ${t.status==='Laufend'?'active':''}" onclick="setStatus('${id}','Laufend',this)">🔄<br>Laufend</button>
+        <button class="status-btn erledigt ${t.status==='Erledigt'?'active':''}" onclick="setStatus('${id}','Erledigt',this)">✅<br>Erledigt</button>
+        <button class="status-btn blockiert ${t.status==='Blockiert'?'active':''}" onclick="setStatus('${id}','Blockiert',this)">⛔<br>Blockiert</button>
+      </div>
+    </div>`;
+  }).join('');
+  updateHeader();
+}
+
+function setStatus(id,status,btn){
+  const card=btn.closest('.task-card');
+  card.dataset.status=status;
+  card.querySelectorAll('.status-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  const title=card.querySelector('.task-title');
+  title.style.textDecoration=status==='Erledigt'?'line-through':'';
+  title.style.color=status==='Erledigt'?'#aaa':'';
+  window.fbSetStatus(id,status);
+}
+
+function delTask(id){
+  if(!confirm('Aufgabe wirklich löschen?'))return;
+  window.fbDeleteTask(id);
+}
+
+function delComment(taskId,commentId){
+  window.fbDeleteComment(taskId,commentId);
+}
+
+function openTaskModal(){
+  document.getElementById('t-title').value='';
+  document.getElementById('t-date').value='';
+  openModal('task-modal');
+}
+
+function addTask(){
+  const title=document.getElementById('t-title').value.trim();
+  if(!title){alert('Bitte Aufgabe eingeben');return;}
+  window.fbAddTask({
+    title,
+    bereich:document.getElementById('t-bereich').value,
+    person:document.getElementById('t-person').value,
+    status:document.getElementById('t-status').value,
+    prio:document.getElementById('t-prio').value,
+    date:document.getElementById('t-date').value,
+  });
+  closeModal('task-modal');
+}
+
+function openComment(taskId){
+  commentTaskId=taskId;
+  selectedAuthor=null;
+  const t=getTasks()[taskId];
+  document.getElementById('c-task-name').textContent=t?t.title:'';
+  document.getElementById('c-text').value='';
+  document.getElementById('c-person-select').innerHTML=PERSONS.map(p=>`
+    <button class="person-chip-btn" style="border-color:${p.bg};color:${p.fg};background:${p.bg}"
+      onclick="selAuthor('${p.label}',this)">${p.label}</button>`).join('');
+  openModal('comment-modal');
+}
+
+function selAuthor(label,btn){
+  selectedAuthor=label;
+  document.querySelectorAll('.person-chip-btn').forEach(b=>b.classList.remove('selected'));
+  btn.classList.add('selected');
+}
+
+function saveComment(){
+  const text=document.getElementById('c-text').value.trim();
+  if(!text){alert('Bitte Kommentar eingeben');return;}
+  const now=new Date();
+  const ts=`${String(now.getDate()).padStart(2,'0')}.${String(now.getMonth()+1).padStart(2,'0')}.${now.getFullYear()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  window.fbAddComment(commentTaskId,{author:selectedAuthor||'Unbekannt',text,time:ts});
+  closeModal('comment-modal');
+}
+
+function updateHeader(){
+  const tasks=Object.values(getTasks());
+  document.getElementById('hs-total').textContent=tasks.length;
+  document.getElementById('hs-done').textContent=tasks.filter(t=>t.status==='Erledigt').length;
+}
+
+// ── CALENDAR ─────────────────────────────────────────────────
+function getEvents(){return window.FSB?window.FSB.events:{};}
+
+function renderCalendar(){
+  document.getElementById('cal-label').textContent=MONTHS_DE[calMonth]+' '+calYear;
+  const grid=document.getElementById('cal-grid');
+  let html=DAYS_DE.map(d=>`<div class="cal-day-name">${d}</div>`).join('');
+  const first=new Date(calYear,calMonth,1);
+  let dow=(first.getDay()+6)%7;
+  const dim=new Date(calYear,calMonth+1,0).getDate();
+  const dimp=new Date(calYear,calMonth,0).getDate();
+  const today=new Date();
+  let cells=[];
+  for(let i=dow-1;i>=0;i--)cells.push({d:dimp-i,cur:false});
+  for(let d=1;d<=dim;d++)cells.push({d,cur:true});
+  while(cells.length<42)cells.push({d:cells.length-dim-dow+1,cur:false});
+  const events=getEvents();
+  cells.forEach(cell=>{
+    const m=calMonth+1;
+    const ds=`${calYear}-${String(m).padStart(2,'0')}-${String(cell.d).padStart(2,'0')}`;
+    const isToday=cell.cur&&calYear===today.getFullYear()&&calMonth===today.getMonth()&&cell.d===today.getDate();
+    const evs=Object.entries(events).filter(([id,e])=>e.date===ds);
+    const shown=evs.slice(0,2);const more=evs.length-shown.length;
+    const evHtml=shown.map(([id,e])=>`<div class="cal-ev" style="background:#d4f0c0;color:#2d5016">${e.title}</div>`).join('');
+    html+=`<div class="cal-cell${!cell.cur?' other-month':''}${isToday?' today':''}" onclick="openEventModal('${ds}')">
+      <div class="cal-num">${cell.d}</div>${evHtml}${more>0?`<div class="cal-more">+${more}</div>`:''}
+    </div>`;
+  });
+  grid.innerHTML=html;
+  renderEventList();
+}
+
+function renderEventList(){
+  const events=getEvents();
+  const evs=Object.entries(events).filter(([id,e])=>{
+    const d=new Date(e.date+'T12:00:00');
+    return d.getFullYear()===calYear&&d.getMonth()===calMonth;
+  }).sort(([,a],[,b])=>a.date.localeCompare(b.date));
+  const el=document.getElementById('event-list');
+  if(!evs.length){el.innerHTML='<p style="color:var(--text-soft);font-size:.81rem">Keine Events diesen Monat.</p>';return;}
+  el.innerHTML=evs.map(([id,e])=>{
+    const d=new Date(e.date+'T12:00:00');
+    const label=d.toLocaleDateString('de-CH',{weekday:'short',day:'numeric',month:'long'});
+    return`<div class="event-item">
+      <div class="event-dot"></div>
+      <div class="event-info">
+        <strong>${e.title}</strong>
+        <div class="event-meta">${label}${e.time?' · '+e.time:''}${e.location?' · '+e.location:''}</div>
+        <div class="event-attendees">${e.attendees||''}</div>
+        ${e.note?`<div style="font-size:.69rem;color:var(--text-soft);margin-top:2px">${e.note}</div>`:''}
+      </div>
+      <button class="event-del" onclick="window.fbDeleteEvent('${id}')">🗑</button>
+    </div>`;
+  }).join('');
+}
+
+function changeMonth(dir){
+  calMonth+=dir;
+  if(calMonth>11){calMonth=0;calYear++;}
+  if(calMonth<0){calMonth=11;calYear--;}
+  renderCalendar();
+}
+
+function openEventModal(dateStr){
+  document.getElementById('attendee-selector').innerHTML=PERSONS.map(p=>`
+    <div class="attendee-row" onclick="toggleAtt(this)" data-person="${p.label}">
+      <div class="attendee-check-box"></div>
+      <div class="attendee-dot-sm" style="background:${p.fg}"></div>
+      <span class="attendee-label">${p.label}</span>
+    </div>`).join('');
+  document.getElementById('ev-title').value='';
+  document.getElementById('ev-time').value='';
+  document.getElementById('ev-location').value='';
+  document.getElementById('ev-note').value='';
+  document.getElementById('ev-date').value=dateStr||'';
+  openModal('event-modal');
+}
+
+function toggleAtt(row){
+  row.classList.toggle('selected');
+  row.querySelector('.attendee-check-box').textContent=row.classList.contains('selected')?'✓':'';
+}
+
+function addEvent(){
+  const title=document.getElementById('ev-title').value.trim();
+  const date=document.getElementById('ev-date').value;
+  if(!title||!date){alert('Bitte Titel und Datum eingeben');return;}
+  const attendees=[...document.querySelectorAll('.attendee-row.selected')].map(r=>r.dataset.person).join(', ');
+  window.fbAddEvent({date,time:document.getElementById('ev-time').value,title,location:document.getElementById('ev-location').value.trim(),attendees,note:document.getElementById('ev-note').value.trim()});
+  closeModal('event-modal');
+}
+
+// ── ROLES ────────────────────────────────────────────────────
+function renderRoles(){
+  document.getElementById('roles-grid').innerHTML=roles.map((r,ri)=>`
+    <div class="role-card" style="border-left-color:${r.color}">
+      <div class="role-sub">Aufgabenbereich</div>
+      <h3>${r.person}</h3>
+      <ul class="role-items">
+        ${r.items.map((item,ii)=>`<li class="role-item"><span class="role-item-text">${item}</span><button class="role-item-edit" onclick="openRoleEdit(${ri},${ii})">✏️</button></li>`).join('')}
+      </ul>
+      <button class="role-add-btn" onclick="openRoleAdd(${ri})">+ Aufgabe hinzufügen</button>
+    </div>`).join('');
+}
+
+function openRoleEdit(ri,ii){
+  roleEditTarget={ri,ii,isNew:false};
+  document.getElementById('role-modal-title').textContent='Aufgabe bearbeiten – '+roles[ri].person;
+  document.getElementById('role-edit-input').value=roles[ri].items[ii];
+  openModal('role-modal');
+}
+function openRoleAdd(ri){
+  roleEditTarget={ri,ii:-1,isNew:true};
+  document.getElementById('role-modal-title').textContent='Aufgabe hinzufügen – '+roles[ri].person;
+  document.getElementById('role-edit-input').value='';
+  openModal('role-modal');
+}
+function saveRoleEdit(){
+  const text=document.getElementById('role-edit-input').value.trim();
+  if(!text){alert('Bitte Text eingeben');return;}
+  const{ri,ii,isNew}=roleEditTarget;
+  if(isNew)roles[ri].items.push(text);
+  else roles[ri].items[ii]=text;
+  closeModal('role-modal');renderRoles();
+}
+
+// ── OVERVIEW ─────────────────────────────────────────────────
+function renderOverview(){
+  const tasks=Object.values(getTasks());
+  const s=(st)=>tasks.filter(t=>t.status===st).length;
+  document.getElementById('ov-offen').textContent=s('Offen');
+  document.getElementById('ov-laufend').textContent=s('Laufend');
+  document.getElementById('ov-erledigt').textContent=s('Erledigt');
+  document.getElementById('ov-blockiert').textContent=s('Blockiert');
+  document.getElementById('prog-bars').innerHTML=PERSONS.map(per=>{
+    const mine=tasks.filter(t=>t.person===per.label);
+    const done=mine.filter(t=>t.status==='Erledigt').length;
+    const pct=mine.length?Math.round(done/mine.length*100):0;
+    return`<div class="prog-row"><span class="prog-label" style="color:${per.fg};font-weight:600">${per.label}</span><div class="prog-track"><div class="prog-fill" style="width:${pct}%;background:${per.fg}"></div></div><span class="prog-count">${done}/${mine.length}</span></div>`;
+  }).join('');
+  renderFwStats();renderFoodGrid();
+}
+
+function renderFwStats(){
+  document.getElementById('freiwillige-rows').innerHTML=freiwilligeData.map((fw,i)=>`
+    <div class="stats-row">
+      <span class="stats-label">${fw.label}</span>
+      <input class="stats-input" type="number" min="0" value="${fw.count||''}" placeholder="0" oninput="updateFw(${i},this.value)">
+      <span class="stats-unit">Personen</span>
+    </div>`).join('');
+  updateFwTotal();
+}
+function updateFw(i,v){freiwilligeData[i].count=parseInt(v)||0;updateFwTotal();}
+function updateFwTotal(){document.getElementById('fw-total').textContent=freiwilligeData.reduce((s,fw)=>s+(fw.count||0),0);}
+function updateVisitorTotal(){
+  const a=parseInt(document.getElementById('vis-adult').value)||0;
+  const k=parseInt(document.getElementById('vis-kids').value)||0;
+  const s=parseInt(document.getElementById('vis-senior').value)||0;
+  const v=parseInt(document.getElementById('vis-vol').value)||0;
+  document.getElementById('vis-total').textContent=a+k+s+v;
+}
+function renderFoodGrid(){
+  document.getElementById('food-grid').innerHTML=foodItems.map((f,i)=>`
+    <div class="food-item">
+      <span class="food-emoji">${f.emoji}</span>
+      <div class="food-info">
+        <div class="food-name">${f.name}</div>
+        <div style="display:flex;align-items:center;gap:4px;margin-top:3px">
+          <input class="food-input" type="number" min="0" value="${f.amount||''}" placeholder="0" oninput="updateFood(${i},this.value)">
+          <span class="food-unit">${f.unit}</span>
+        </div>
+      </div>
+    </div>`).join('')+`
+    <div class="food-add-row">
+      <input class="food-add-input" type="text" id="new-food-name" placeholder="Neues Lebensmittel...">
+      <button class="food-add-btn" onclick="addFoodItem()">+</button>
+    </div>`;
+}
+function updateFood(i,v){foodItems[i].amount=v;}
+function addFoodItem(){
+  const name=document.getElementById('new-food-name').value.trim();
+  if(!name)return;
+  foodItems.push({emoji:'🥬',name,amount:'',unit:'kg'});
+  renderFoodGrid();
+}
+
+// ── MODAL HELPERS ────────────────────────────────────────────
+function openModal(id){document.getElementById(id).classList.add('open');}
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+document.querySelectorAll('.modal-overlay').forEach(m=>{
+  m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');});
+});
+</script>
+</body>
+</html>
